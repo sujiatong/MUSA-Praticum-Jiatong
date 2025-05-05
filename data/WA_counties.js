@@ -1,4 +1,4 @@
-const countiesData = 
+const countiesData_WA = 
 {
 "type": "FeatureCollection",
 "name": "WA_counties",
