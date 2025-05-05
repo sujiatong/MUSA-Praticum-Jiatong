@@ -3,42 +3,69 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WA County Disconnections Map</title>
+  <title>Utility data modeling</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
+  
 <div class="container">
-  <div id="map"></div>
 
-  <div class="control-panel">
-    <label for="yearSelect">Year:</label>
-    <select id="yearSelect">
-      <option value="2019">2019</option>
-      <option value="2020">2020</option>
-      <option value="2021">2021</option>
-      <option value="2022">2022</option>
-      <option value="2023">2023</option>
-      <option value="2024">2024</option>
-    </select>
+  <section id="intro">
+    <h2>Introduction</h2>
+    <p>This dashboard visualizes utility disconnection estimates across different counties. 
+    The project aggregates ZIP code level data to the county level, providing insights into spatial patterns of utility burden and disconnections.</p>
+    <p>You can switch states, select different years, and explore the results interactively.</p>
+  </section>
+
+  <select id="stateSelect">
+    <option value="WA" selected>Washington</option>
+    <option value="OR">Oregon</option>
+    <option value="CA">California</option>
+    <option value="MD">Maryland</option> <!-- ⭐加了Maryland -->
+  </select>
+
+  <label for="yearSelect">Year:</label>
+  <select id="yearSelect">
+    
+  </select>
+
 
     <label for="utilitySelect">Utility:</label>
     <select id="utilitySelect">
       <option value="All">All</option>
-    </select>
-  </div>
-</div>
+  </select>
 
-<div id="metricToggle">
+  <div id="metricToggle">
     <label><input type="radio" name="metric" value="total_disconnections" checked> Total Disconnections</label>
     <label><input type="radio" name="metric" value="mape"> MAPE</label>
   </div>
 
+
+  
+  <div id="map"></div>
+
+
+
+  </div>
+</div>
+
+
+
+
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="data/WA_county_agg_summary.js"></script>
-<script src="data/wa_counties.js"></script>
+<script src="data/WA_counties.js"></script>
+<script src="data/MD_county_agg_summary.js"></script>
+<script src="data/MD_counties.js"></script>
+<script src="data/OR_county_agg_summary.js"></script>
+<script src="data/OR_counties.js"></script>
+<script src="data/CA_county_agg_summary.js"></script>
+<script src="data/CA_counties.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
+
 
