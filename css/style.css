@@ -14,3 +14,53 @@
     box-shadow: 0 0 5px rgba(0,0,0,0.5);
   }
   
+  <style>
+/* 整個控制面板 */
+.control-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px; /* 元素間距 */
+  padding: 10px;
+  background-color: #f9f9f9; /* 淺灰底色 */
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-family: Arial, sans-serif;
+}
+
+/* 每個label + select */
+.control-panel label {
+  margin-right: 5px;
+  font-weight: bold;
+}
+
+/* select選單樣式 */
+.control-panel select {
+  padding: 5px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+/* metric toggle 區塊 */
+#metricToggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 10px;
+}
+
+/* radio button加label */
+#metricToggle label {
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* 調整 radio 大小 */
+#metricToggle input[type="radio"] {
+  transform: scale(1.2);
+}
+</style>
