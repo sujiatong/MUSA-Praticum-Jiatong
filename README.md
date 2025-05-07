@@ -1,1 +1,1 @@
-https://sujiatong.github.io/MUSA-Praticum-Jiatong/index.html
+https://sujiatong.github.io/MUSA-Praticum-Jiatong/dashboard/index.html
