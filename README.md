@@ -4,9 +4,12 @@
 
 Dashborad: https://sujiatong.github.io/MUSA-Praticum-Jiatong/dashboard/index.html
 
+## Data source
+- [Utility disconnection data](https://github.com/sujiatong/MUSA-Praticum-Jiatong/tree/d68658d60ef7d0ed9b9b2154280c585d7780c8aa/Zip%20Code%20Data/State-Specific%20Data) within each state (zip level)
+-  ZIP Code Crosswalk data from [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html)
+-  [Census data](https://www.census.gov/geographies/reference-files/time-series/geo/county-adjacency.html) for county information
 
-
-### Refrence
+## Refrence
 Carley, S., Mildenberger, M., Konisky, D. M., & Stokes, L. C. (2023). Utility disconnection protections and the incidence of energy insecurity in the United States. Energy Research & Social Science, 100, 103051. https://doi.org/10.1016/j.erss.2023.103051
 
 Energy Justice Lab. Utility Disconnections Dashboard. Retrieved May 7, 2025, from https://utilitydisconnections.org/index.html
