@@ -25,13 +25,13 @@ const stateDataFiles = {
   'OR': {
     counties: countiesData_OR,
     summary: summaryData_OR,
-    center: [43.8, -120.5], // Oregon 中心點
+    center: [43.8, -120.5], 
     zoom: 7
   },
   'CA': {
     counties: countiesData_CA,
     summary: summaryData_CA,
-    center: [37.25, -119.75], // California 中心點
+    center: [37.25, -119.75], // add more json if necessary
     zoom: 7
   }  
 };
@@ -53,15 +53,15 @@ function loadStateData(state) {
 
   map.setView(stateInfo.center, stateInfo.zoom);
 
-  // 更新utility選單
+  // update utiltiy
   populateUtilityOptions(allData);
-  populateYearOptions(allData); // ⭐️自動產生年份選項
+  populateYearOptions(allData); // display year
   updateMap();
 }
 
 function populateUtilityOptions(data) {
   const utilitySelect = document.getElementById('utilitySelect');
-  utilitySelect.innerHTML = ''; // ⭐️切州時要清空舊的選項
+  utilitySelect.innerHTML = ''; // ⭐️switch state
 
   const utilities = new Set();
   data.features.forEach(f => {
@@ -77,7 +77,7 @@ function populateUtilityOptions(data) {
     utilitySelect.appendChild(option);
   });
 
-  // 加一個"All"選項
+  // "all" option
   const allOption = document.createElement('option');
   allOption.value = "All";
   allOption.text = "All Utilities";
@@ -194,11 +194,11 @@ function getColor(d, metric) {
   }
 }
 
-// 加上選單 change 事件
+// change event
 document.getElementById('yearSelect').addEventListener('change', updateMap);
 document.getElementById('utilitySelect').addEventListener('change', updateMap);
 
-// ⭐️加一個州選單切換事件
+// state select
 document.getElementById('stateSelect').addEventListener('change', function() {
   const newState = this.value;
   currentState = newState;
@@ -208,7 +208,7 @@ document.getElementById('stateSelect').addEventListener('change', function() {
 /// year
 function populateYearOptions(data) {
   const yearSelect = document.getElementById('yearSelect');
-  yearSelect.innerHTML = ''; // ⭐️清空舊的年份選項
+  yearSelect.innerHTML = ''; // ⭐️clean year select
 
   const years = new Set();
   data.features.forEach(f => {
@@ -217,7 +217,7 @@ function populateYearOptions(data) {
     }
   });
 
-  // 把Set轉成Array並排序
+  // set & array
   const sortedYears = Array.from(years).sort((a, b) => a - b);
 
   sortedYears.forEach(year => {
