@@ -8,7 +8,32 @@ Dashborad: https://sujiatong.github.io/MUSA-Praticum-Jiatong/dashboard/index.htm
 - [Utility disconnection data](https://github.com/sujiatong/MUSA-Praticum-Jiatong/tree/d68658d60ef7d0ed9b9b2154280c585d7780c8aa/Zip%20Code%20Data/State-Specific%20Data) within each state (zip level)
 -  ZIP Code Crosswalk data from [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html)
 -  [Census data](https://www.census.gov/geographies/reference-files/time-series/geo/county-adjacency.html) for county information
+  
 
+## Objective
+- Aggregating utility disconnection data each state to the county level
+- Analysing the process and feasibility and accuracy of the process
+
+
+
+## Aggregating (ZIP-to-county aggregation)
+
+ZIP-to-county aggregation summarizes utility disconnection data at the **county level** in Washington State by grouping the dataset `merged_utility` based on `NAME` (county), `year`, `month`, and `utility_name`.
+The resulting summary table `county_agg` includes:
+
+-   **`total_disconnections`**: The total number of reported utility disconnections in each group.
+
+-   **`est_disconnections`**: The estimated number of disconnections, adjusted using a weighting factor (`data.results.tot_ratio`), which accounts for partial ZIP-to-county mappings.
+
+-   **`avg_disconnection_rate`**: The average disconnection count per record in each zip code
+
+-   **`difference`**: The numerical difference between the **`total_disconnections`** and **`est_disconnections`** totals, which can help assess the impact of the weighting method.
+
+- **`PCT_DIF`**: the precentage of **`difference`**
+- **`mae`** (Mean Absolute Error): mean of absolute differences between total_disconnections and est_disconnections
+
+- **`mape`**(Mean Absolute Percentage Error):
+the percentage equivalent of mean absolute error (MAE), measuring the accuracy between total_disconnections and est_disconnections
 ## Refrence
 Carley, S., Mildenberger, M., Konisky, D. M., & Stokes, L. C. (2023). Utility disconnection protections and the incidence of energy insecurity in the United States. Energy Research & Social Science, 100, 103051. https://doi.org/10.1016/j.erss.2023.103051
 
