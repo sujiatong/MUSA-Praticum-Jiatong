@@ -1,0 +1,593 @@
+---
+title: "oregon"
+date: "2025-04-09"
+output:
+  html_document:
+    theme: simplex
+    toc: yes
+    toc_float: yes
+    progress: hide
+    code_folding: hide
+    code_download: yes
+  params:
+  include_warnings: false  # Add this line to suppress warnings
+  
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('/Users/jiatong/Desktop/MUSA-Praticum-Jiatong/State_agg_Rmd')
+library(httr)
+library(httr)
+library(jsonlite)
+library(sf)
+library(knitr)
+library(ggplot2)
+library(tidycensus)
+library(dplyr)
+library(sf)
+library(readr)
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+# Introduction
+
+Utility disconnection refers to the cuts off service due to non-payment.
+Million of households across the United States face utility disconnections because they are unable to afford their bills, highlighting a significant and widespred issue of energy insecurity.
+
+The following analysis aggregate utility disconnection rate data from zip codes to counties in order to reveal broader geographic patterns and disparities.
+
+# File import - data pre-processing
+
+To aggregating the zip code to counties level, I will use the [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) zip code crosswalk data.
+This dataset provides robust way to reapportion data from zip code to geographic units, such as county level, tract level.
+
+in some case, some zip codes crosswalk mutiple county.
+This data provide the address ratio for each zip code.
+in the following examination, i will following [Wilson and Din (2018)](https://www.huduser.gov/portal/periodicals/cityscpe/vol20num2/ch16.pdf) suggestion, remove the duplicating zip code that determines the county base on the largest ratio.
+
+## HUD zip code crosswalk data
+
+The following code chunk that imports [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) zip code crosswalk data.
+
+[HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) utilize use of the geographical information of USPS delivery points to allocate them to geographic units (such as Census Tracts or Counties).
+HUD establishes proportionally weighted variables, such as res_ratio, bus_ratio, etc, indicating which geographical unit each address in a certain ZIP Code is distributed.
+
+```{r}
+
+key <- "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI2IiwianRpIjoiODk1ZWRlZDM4MjgwOTIyZDFlY2Q2MmYxMjMwODcwMDYwNGYxNTZiYzE5NWEzYmJlMmYwMGRhMmY5MDQ0MzI3N2YzM2E3NGE0M2Q2ZjY2ZmIiLCJpYXQiOjE3NDM3MDY1NDkuNzYyMzcxLCJuYmYiOjE3NDM3MDY1NDkuNzYyMzc0LCJleHAiOjIwNTkyMzkzNDkuNzQ0NzQ1LCJzdWIiOiI5NDUxMSIsInNjb3BlcyI6W119.aw4CshBNx4n3m-y1jjt1OrNh28BaRr3mNBH51OptRk_FCNZk8Su68E06d6tZ7UViafXsSeI1-OzazhGqnMzSJA"
+url <- "https://www.huduser.gov/hudapi/public/usps"
+
+# Note that type is set to 1 which will return values for the ZIP to Tract file and query is set to VA which will return Zip Codes in Virginia
+response_OR <- httr::GET(url, query = list(type = 2, query = "OR"), add_headers(Authorization = paste("Bearer", key)))
+
+# Check for errors
+if (httr::http_error(response_OR)) {
+  stop("Error: ", httr::http_status(response_OR)$message)
+}
+
+# Access the output as text
+outputOR <- httr::content(response_OR, as = "text", encoding = "UTF-8")
+
+# Parse JSON content
+output_json_OR <- fromJSON(outputOR)
+
+# Convert the parsed JSON to a data frame
+OR_data <- as.data.frame(output_json_OR)
+
+# View the first few rows to understand the structure
+kable(head(OR_data))
+
+```
+
+```{r, include=FALSE}
+names(OR_data)
+# data.results.geoid = county geoid
+# data.results.res_ratio = The ratio of residential addresses in the ZIP 
+```
+
+```{r, include=FALSE}
+OR_data %>% distinct(data.results.geoid)
+```
+
+## Census for County_FIPS
+
+> Since HUD file does not have County name, but it contains `data.results.geoid`, which is county of GEOID.
+>
+> [County adjacency file](https://www.census.gov/geographies/reference-files/time-series/geo/county-adjacency.html) provide the reference of GEOID in Census data, which also provide the actual county name.
+>
+> In census file, `GEOID` = `data.results.geoid` from [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) crosswalk file.
+
+```{r, include=FALSE}
+
+# Set your Census API key (only once per session)
+# census_api_key("YOUR_API_KEY", install = TRUE)
+
+# Get Oregon county geometries
+OR_counties <- get_acs(
+  geography = "county",
+  state = "OR",
+  variables = "B01003_001",  # total population (placeholder variable)
+  geometry = TRUE,
+  year = 2021
+) %>%
+  select(GEOID, NAME, geometry)
+
+
+```
+```{r}
+head(OR_counties)
+```
+
+```{r, include=FALSE}
+OR_counties %>%  distinct(GEOID)
+
+```
+
+## Merging census and HUD crosswalk data to get the county name
+
+> The following code chunk merges census data with HUD crosswalk data to obtain the corresponding county names.
+
+```{r, merged_data_or, echo=FALSE}
+# Convert both columns to character if they are not already
+OR_counties$GEOID <- as.character(OR_counties$GEOID)
+OR_data$data.results.geoid <- as.character(OR_data$data.results.geoid)
+
+# Check column names
+#colnames(OR_counties)
+# colnames(OR_data)
+
+# Merge by GEOID and County_FIPS
+merged_data_or <- merge(OR_counties, OR_data, by.x = "GEOID", by.y = "data.results.geoid", all.x = TRUE)
+
+# Display the merged data
+kable(head(merged_data_or))
+```
+
+# Removing the duplicate zip code
+
+Sometimes, Zip code do not corresponds to administrative boundaries, such as county, city, and tract (Din, A. 2021; Wilson, R., & Din, A. 2018; Din, A., & Wilson, R. 2020).
+Therefore, duplicate zip code will exist.
+
+To address duplicating zip code, it need to determine the zip code in certian county.
+I will following [Wilson and Din (2018)](https://www.huduser.gov/portal/periodicals/cityscpe/vol20num2/ch16.pdf) suggestion, remove the duplicating zip code that determines the county base on the largest ratio.
+
+```{r filtered_data_OR}
+# Remove duplicates and keep rows with the maximum data.results.tot_ratio for each ZIP code
+
+filtered_data_OR <- merged_data_or %>%
+  group_by(data.results.zip) %>%
+  filter(data.results.tot_ratio == max(data.results.tot_ratio)) %>%
+  ungroup() %>% 
+  select(-data.year, -data.quarter, -data.results.state)
+
+# View the filtered data
+kable(head(filtered_data_OR))
+```
+
+# Merging utility data with zip code data
+
+> Merging utility with zip code data
+
+```{r merged_utility_OR, warning=FALSE}
+
+oregon <- read_csv("State-Specific Data/OR_2018-2024.csv")
+
+# Convert both columns to character if they are not already
+filtered_data_OR$data.results.zip <- as.character(filtered_data_OR$data.results.zip)
+oregon$zip_code <- as.character(oregon$zip_code)
+
+merged_utility_OR <- merge(oregon, filtered_data_OR, by.x = "zip_code", by.y = "data.results.zip", all.x = TRUE)
+```
+
+> HUD data does not have all the zip code.
+>
+> As we can see, several of the following 10 ZIP Codes are either incorrectly formatted (i.e., not 5-digit codes) or located outside the state of Oregon.
+
+
+## Avoiding removing those ambiguous zip code
+
+-   If ZIP code is valid ➔ `"County Name, State Abbreviation"`\
+    (example: `"Baker County, OR"`)
+
+-   If ZIP code is invalid ➔ `"Invalid"`
+
+    I checked using the [ZIP code lookup](https://www.unitedstateszipcodes.org) resources.
+
+```{r avoiding_remove_ambigous_zip}
+
+merged_utility_OR <- merged_utility_OR %>%
+  mutate(NAME = case_when(
+    zip_code == 83301 ~ "Twin Falls County, Idaho",
+    zip_code == 83642 ~ "Ada County, Idaho",
+    zip_code == 83687 ~ "Canyon County, Idaho",
+    zip_code == 97248 ~ "Invalid",
+    zip_code == 97372 ~ "Invalid",
+    zip_code == 97809 ~ "Baker County, Oregon",
+    zip_code == 9722  ~ "Invalid",
+    zip_code == 1     ~ "Invalid",
+    zip_code == 2     ~ "Invalid",
+    zip_code == 8     ~ "Invalid",
+    TRUE ~ NAME  # ⭐️ keep the original County_Name for all others
+  ),
+data.results.tot_ratio = case_when(
+      zip_code %in% c(83301, 83642, 83687, 97248, 97372, 97809, 9722, 1, 2, 8) ~ 1,
+      TRUE ~ data.results.tot_ratio))
+
+```
+
+```{r, include=FALSE}
+
+merged_utility_OR_1 <- merged_utility_OR %>%   
+  mutate(      
+    est_disconnections = number_of_disconnections * data.results.tot_ratio,
+    difference = number_of_disconnections - est_disconnections,
+    PCT_DIF = ifelse(number_of_disconnections == 0, NA,
+                     100 * (est_disconnections - number_of_disconnections) / number_of_disconnections),
+    mae = abs(difference),  
+    mape = case_when(
+      number_of_disconnections == 0 & est_disconnections == 0 ~ 0,  
+      number_of_disconnections == 0 ~ NA_real_,                   
+      TRUE ~ abs(difference) / number_of_disconnections * 100     
+    ))
+
+```
+
+# Aggregating
+
+this section aggregating from zip code to county level, which summaring one line per county , year, month, utility.
+
+-   total_disconnections: sum of the `number_of_disconnections` within each zip code
+
+-   est_disconnections: Each ZIP-level disconnection is multiplied by `data.results.tot_ratio`, which represents the **proportion of ZIP activity** (e.g., addresses) located in a given county.
+
+-   total_customers: sum of the `number_of_disconnections`within each zip code
+
+-   avg_disconnection_rate: mean of the `number_of_disconnections` within each zip code
+
+-   difference: showing how far off the estimate is from the actual total
+
+    -   A positive value = overestimate; negative = underestimate
+
+```{r}
+
+OR_county_agg <- merged_utility_OR %>%
+  group_by(NAME, year, month, utility_name) %>%
+  summarise(
+    total_disconnections = sum(number_of_disconnections, na.rm = TRUE),
+    est_disconnections = sum(number_of_disconnections * data.results.tot_ratio, na.rm = TRUE),
+    avg_disconnection_rate = mean(number_of_disconnections, na.rm = TRUE),
+    difference = sum(total_disconnections - est_disconnections, na.rm = TRUE),  
+    PCT_DIF = case_when(
+      sum(number_of_disconnections, na.rm = TRUE) == 0 & sum(number_of_disconnections, na.rm = TRUE) == 0 ~ 0,
+      sum(number_of_disconnections, na.rm = TRUE) == 0 ~ NA_real_,
+      TRUE ~ 100 * (sum(est_disconnections, na.rm = TRUE) - sum(number_of_disconnections, na.rm = TRUE)) / sum(number_of_disconnections, na.rm = TRUE)
+    ),
+    mae = abs(sum(difference, na.rm = TRUE)),
+    mape = case_when(
+      sum(number_of_disconnections, na.rm = TRUE) == 0 & sum(number_of_disconnections, na.rm = TRUE) == 0 ~ 0,
+      sum(number_of_disconnections, na.rm = TRUE) == 0 ~ NA_real_,
+      TRUE ~ abs(sum(difference, na.rm = TRUE)) / sum(number_of_disconnections, na.rm = TRUE) * 100
+    ),
+    .groups = "drop"   
+  )
+
+
+kable(head(OR_county_agg))
+
+
+```
+
+```{r, include=FALSE}
+OR_county_agg_geo_full <- OR_county_agg %>%
+  left_join(OR_counties, by = "NAME") %>%
+  st_as_sf()
+
+#st_write(OR_county_agg_geo_full, "/Users/jiatong/Desktop/MUSA-practicum/WA/data/OR_county_agg_summary.geojson", driver = "GeoJSON")
+write_csv(OR_county_agg, "OR_county_agg_summary.csv")
+
+```
+
+
+```{r}
+# Step 1: group by NAME + year，summary total_disconnections
+OR_county_agg_summary <- OR_county_agg %>%
+  group_by(NAME, year) %>%
+  summarise(
+    total_disconnections = sum(total_disconnections, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Step 2: creating grid
+county_year_grid <- expand_grid(
+  NAME = unique(OR_counties$NAME),
+  year = unique(OR_county_agg_summary$year)
+)
+
+# Step 3: Left join
+OR_county_agg_geo <- county_year_grid %>%
+  left_join(OR_counties, by = "NAME") %>%
+  left_join(OR_county_agg_summary, by = c("NAME", "year")) %>%
+  st_as_sf()
+
+# Step 4: 
+ggplot(OR_county_agg_geo) +
+  geom_sf(aes(fill = total_disconnections), color = "white") +
+  facet_wrap(~ year) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt", na.value = "grey80") +
+  labs(
+    title = "Cumulative Total Disconnections in Disconnection Estimates (2018–2024)",
+    fill = "Total Disconnections",
+    caption = "Source: Aggregated ZIP-to-County Estimates\nUnit: Disconnection Count Difference"
+  ) +
+  theme_minimal() +
+    theme(
+    axis.text = element_blank(),   
+    axis.ticks = element_blank(),  
+    panel.grid = element_blank()  
+  )
+```
+
+
+
+
+# Validate
+
+The evaluate the acurancy of aggregating zip code to county, I will following Din, A., & Wilson, R.
+(2020) suggestion to comparing actual count (total_disconnections) and estimate.
+
+
+
+> Measuring the impact of weighting
+>
+> To evaluate how much the weighting affected the total count:
+>
+> -   I summed the **unweighted totals** (`total_disconnections`) across all counties, resulting in **119049" disconnections**.
+
+-   I summed the **weighted totals**(`est_disconnections`), yielding **117852.628280546 disconnections**.
+
+-   The **absolute difference** between the two totals was **1196.37171945398 disconnections**, indicating the net shift caused by applying HUD’s weighting.
+
+```{r}
+print(paste("rows - unweighted total(sum of number_of_disconnections):", sum(OR_county_agg$total_disconnections)))
+print(paste("rows - weighted total(est_disconnection) :", sum(OR_county_agg$est_disconnections)))
+print(paste("Difference (impact of weighting):", sum(OR_county_agg$difference)))
+```
+
+```{r customer_weighted, include=FALSE}
+
+#To evaluate the accuracy of aggregating ZIP code-level utility data to the county level, I follow the approach suggested by Din and Wilson (2020), which emphasizes comparing **actual counts** with **estimated values** derived from HUD ZIP Code Crosswalk ratios.
+#Specifically, I compare the unweighted total number of disconnections (total_disconnections) with the weighted estimates applied during the ZIP-to-county allocation.
+#This method allows for assessing how much the estimation process alters the aggregate totals, and helps to quantify the extent of adjustment introduced by using proportional allocation techniques.
+#This indicates that the estimation process made only a modest adjustment to the data, suggesting that the ZIP-to-county aggregation using HUD crosswalk ratios preserved the original distribution of disconnections with minimal distortion.
+
+
+# Calculate unweighted total
+unweighted_total_cus <- sum(merged_utility_OR$number_of_customers, na.rm = TRUE)
+
+# Calculate weighted total using tot_ratio
+weighted_total_cus <- sum(merged_utility_OR$number_of_customers * merged_utility_OR$data.results.tot_ratio, na.rm = TRUE)
+
+# Calculate difference
+difference_cus <- unweighted_total_cus - weighted_total_cus
+
+# Print results
+print(paste("rows - unweighted customers total:", unweighted_total_cus))
+print(paste("rows - weighted customers total:", weighted_total_cus))
+print(paste("Difference (impact of weighting customers):", difference_cus))
+```
+
+> Relative difference
+To contextualize this shift, I calculated the relative difference as a percentage of the unweighted total:
+
+```{r}
+relative_diff_OR <- 
+  sum(OR_county_agg$difference, na.rm = TRUE) / sum(OR_county_agg$total_disconnections, na.rm = TRUE) * 100
+
+print(paste("Relative Difference (%):", round(relative_diff_OR, 2), "%"))
+```
+
+The 1% relative difference indicates that applying the ZIP-to-county weighting introduces minimal deviation from the raw totals. This result supports the feasibility of using HUD’s crosswalk-based ratios to estimate disconnections at the county level, even in the absence of point-level utility data.
+
+
+```{r}
+
+
+# Create a summarized table: actual vs estimated
+county_comparison <- OR_county_agg %>%
+  group_by(NAME) %>%
+  summarise(
+    actual_total = sum(total_disconnections, na.rm = TRUE),
+    estimated_total = sum(est_disconnections, na.rm = TRUE)
+  ) %>%
+  arrange(desc(actual_total))  # move arrange() here
+
+# Reshape for visualization
+county_long <- county_comparison %>%
+  pivot_longer(cols = c("actual_total", "estimated_total"),
+               names_to = "type", values_to = "value")
+
+# Plot
+ggplot(county_long, aes(x = reorder(NAME, -value), y = value, fill = type)) +
+  geom_col(position = "dodge") +
+  labs(title = "Actual vs Estimated Utility Disconnections by County",
+       x = "County", y = "Number of Disconnections") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+**"Having a high kurtosis is an ideal characteristic of a difference distribution because it indicates that most of the differences are not large and are similar to the average."**\
+— *Wilson, R., & Din, A. (2018)*
+
+
+## **Evaluation Metrics**
+
+in this section, I'm gonna to **Calculate Evaluation Metrics**, which quantify the estimation error across all grouped observations (by county, month, and utility):
+
+-   **MAE (Mean Absolute Error)**: **mean of absolute differences** between `total_disconnections` and `est_disconnections`
+
+    $$
+    \text{Mean Absolute Error} = \frac{1}{n} \sum_{i=1}^{n} \left| \text{total_disconnections}_i - \text{est_disconnections}_i \right|
+    $$
+
+-   **MAPE (Mean Absolute Percentage Error)**: mean((total_disconnections - est_disconnections) / total_disconnections ) \* 100
+
+    $$
+    \text{Mean Percentage Error} = \frac{1}{n} \sum_{i=1}^{n} \left( \frac{\text{total_disconnections} - \text{est_disconnections}_i}{\text{total_disconnections}_i} \right) \times 100
+    $$
+
+
+
+> [Montaño, Juan, and Palmer et al](https://www.researchgate.net/publication/257812432_Using_the_R-MAPE_index_as_a_resistant_measure_of_forecast_accuracy). suggest that a MAPE below 20% indicates good accuracy.
+
+
+```{r}
+print(paste("MAE in zip code level:", round(mean(merged_utility_OR_1$mae, na.rm = TRUE), 2)))
+
+print(paste("MAPE (%) in zip code level:", round(mean(merged_utility_OR_1$mape, na.rm = TRUE), 2)))
+
+```
+In general, the MAPE across Maryland State remains under this 20% threshold, only 1.01% MAPE value represents high accuracy across Maryland in zip code 
+
+
+```{r}
+#library(Metrics)  # optional, for rmse()
+
+# Create error columns
+OR_county_agg <- OR_county_agg %>%
+  mutate(
+    abs_error = abs(total_disconnections - est_disconnections),
+    pct_error = abs_error / ifelse(total_disconnections == 0, NA, total_disconnections)
+  )
+
+# Calculate metrics
+mae <- mean(OR_county_agg$abs_error, na.rm = TRUE)
+mape <- mean(OR_county_agg$pct_error, na.rm = TRUE) * 100  # percentage
+
+print(paste("MAE:", round(mae, 2)))
+print(paste("MAPE (%) in county level:", round(mape, 2)))
+
+```
+
+In general, the MAPE across Oregon State remains under this 20% threshold, only 1.65% MAPE value represents high accuracy across Oregon counties.
+
+
+
+
+> The following plot visualizes the MAPE of disconnection estimates.
+> Overall, the plot shows that MAPE values are generally below 20% for each county, indicating good accuracy.
+
+```{r}
+
+
+# Step 1: make sure each year have County
+county_year_grid <- expand_grid(
+  NAME = unique(OR_counties$NAME),
+  year = unique(OR_county_agg$year)
+)
+
+# Step 2: summary error summary
+county_error_summary <- OR_county_agg %>%
+  group_by(NAME, year) %>%
+  summarise(
+    total_abs_error = sum(mae, na.rm = TRUE),
+    total_disconnections = sum(total_disconnections, na.rm = TRUE),
+    total_est_disconnections = sum(est_disconnections, na.rm = TRUE),
+    mape = (total_abs_error / total_disconnections) * 100,  # Percent form
+    .groups = "drop"
+  )
+
+# Step 3: using grid left_join，let no data be NA value
+county_error_complete <- county_year_grid %>%
+  left_join(county_error_summary, by = c("NAME", "year"))
+
+# Step 4:  join spatial
+county_error_map <- OR_counties %>%
+  left_join(county_error_complete, by = "NAME")  
+
+# Step 5: 
+ggplot(county_error_map) +
+  geom_sf(aes(fill = mape), color = "white") +
+  facet_wrap(~ year) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt", na.value = "grey80") +
+  labs(
+    title = "Cumulative MAPE in Disconnection Estimates (2019–2024)",
+    fill = "MAPE",
+    caption = "Source: Aggregated ZIP-to-County Estimates\nUnit: Disconnection Count Difference"
+  ) +
+  theme_minimal() +
+      theme(
+    axis.text = element_blank(),   
+    axis.ticks = element_blank(),  
+    panel.grid = element_blank()  
+  )
+
+
+```
+
+
+
+# Limitation
+
+In this study, when aggregating utility data from ZIP code to county levels, it is not feasible to directly validate the accuracy of the estimates.
+
+As noted by Din and Wilson (2020), when aggregating data, it is unlikely to have point-level information available; otherwise, there would be no need to perform crosswalk processing.
+
+Although direct validation is not possible, examining differences between estimated and actual counts may reveal additional patterns of utility disconnection rate, which can be further explored through more detailed spatial analysis.
+
+
+<!-- -->
+Among 17027 ZIP code-level records, only 74 records (0.43%) showed a MAPE greater than 20% and a MAE greater than 1.
+
+
+```{r}
+kable(head(
+  merged_utility_OR_1 %>% 
+    filter(mape >20 & mae > 1) %>% 
+    select( -data.results.res_ratio, -data.results.bus_ratio, -data.results.oth_ratio, -GEOID, -state)
+  ))
+
+
+```
+
+
+Among 1791 ZIP code-level records, only 0 records (0%) showed a MAPE greater than 20% and a MAE greater than 1.
+
+```{r}
+kable(
+  OR_county_agg %>% 
+    filter(mape >20 & mae > 1) )
+```
+> Given the absence of point-level disconnection data, this very low error rate demonstrates strong model accuracy at the ZIP code aggregation level.
+
+# Reference
+
+Din, A., & Wilson, R.
+(2020).
+Crosswalking ZIP Codes to Census Geographies: Geoprocessing the U.S.
+Department of Housing & Urban Development’s ZIP Code Crosswalk Files. 
+*Cityscape: A Journal of Policy Development and Research, 22*(1), 293–298.
+U.S.
+Department of Housing and Urban Development. 
+<https://www.huduser.gov/portal/periodicals/cityscpe/vol22num1/ch12.pdf>​
+
+Wilson, R., & Din, A.
+(2018).
+Understanding and enhancing the U.S.
+Department of Housing and Urban Development’s ZIP Code Crosswalk Files. 
+*Cityscape: A Journal of Policy Development and Research, 20*(2), 277–294. 
+<https://www.huduser.gov/portal/periodicals/cityscpe/vol20num2/ch16.pdf>​
+
+Din, A.
+(2021).
+New Data Fields for HUD Aggregated USPS Administrative Data on Address Vacancies.
+*Cityscape*, *23*(3), 283–294.
+<https://www.jstor.org/stable/48636236>
+

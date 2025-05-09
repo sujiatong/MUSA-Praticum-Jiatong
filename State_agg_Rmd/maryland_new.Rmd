@@ -225,10 +225,11 @@ merged_utility_MD <- merged_utility_MD %>%
 ```
 
 
-```{r}
+```{r, include=FALSE}
 library(dplyr)
 library(stringr)
 
+# addressing county name format
 merged_utility_MD <- merged_utility_MD %>%
   mutate(
     county_name = case_when(
@@ -344,7 +345,7 @@ ggplot(MD_county_agg_geo) +
   facet_wrap(~ year) +
   scale_fill_viridis_c(option = "plasma", trans = "sqrt", na.value = "grey80") +
   labs(
-    title = "Cumulative Total Disconnections in Disconnection Estimates (2019–2024)",
+    title = "Cumulative Total Disconnections in Disconnection Estimates",
     fill = "Total Disconnections",
     caption = "Source: Aggregated ZIP-to-County Estimates\nUnit: Disconnection Count Difference"
   ) +
@@ -364,6 +365,7 @@ MD_county_agg_geo_full <- MD_county_agg %>%
 
 #st_write(MD_county_agg_geo_full, "/Users/jiatong/Desktop/MUSA-practicum/WA/data/MD_county_agg_summary.geojson", driver = "GeoJSON")
 
+write_csv(MD_county_agg, "MD_county_agg_summary.csv")
 
 ```
 
