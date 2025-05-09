@@ -18,7 +18,6 @@
 
 </details>
 
-Dashborad（https://sujiatong.github.io/MUSA-Praticum-Jiatong/dashboard/index.html）
 
 ## Data source
 - [Utility disconnection data](https://github.com/sujiatong/MUSA-Praticum-Jiatong/tree/d68658d60ef7d0ed9b9b2154280c585d7780c8aa/Zip%20Code%20Data/State-Specific%20Data) within each state (zip level)
@@ -58,6 +57,10 @@ The resulting summary table `county_agg` includes:
 - **`mape`**(Mean Absolute Percentage Error):
 the percentage equivalent of mean absolute error (MAE), measuring the accuracy between total_disconnections and est_disconnections
 
+
+You can explore each ``county_agg`` summary table through the interactive 
+[Dashborad](https://sujiatong.github.io/MUSA-Praticum-Jiatong/dashboard/index.html)
+
 --- 
 ### #2 Vadilating
   - comparing total_disconnections and est_disconnections
@@ -70,7 +73,14 @@ the percentage equivalent of mean absolute error (MAE), measuring the accuracy b
 - [Oregon](https://sujiatong.github.io/MUSA-Praticum-Jiatong/State_agg_Rmd/oregon.html)
 - [Washington](https://sujiatong.github.io/MUSA-Praticum-Jiatong/State_agg_Rmd/WA.html)
   
-  Please also all the material and dataset https://github.com/sujiatong/MUSA-Praticum-Jiatong/tree/main/State_agg_Rmd
+
+Hint: All ``county_agg`` summary tables have already been exported as ``.csv `` and ``.json`` files. 
+
+- The ``.json`` files can be found in the [dashboard/data](https://github.com/sujiatong/MUSA-Praticum-Jiatong/tree/main/dashboard/data) folder.
+
+- All related materials and datasets — including R Markdown (.Rmd) files and ``.csv ``files — are available in the [State_agg_Rmd](https://github.com/sujiatong/MUSA-Praticum-Jiatong/tree/main/State_agg_Rmd) folder of the repository.
+
+
 
 
 ## Refrence
