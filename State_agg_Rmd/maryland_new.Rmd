@@ -1,0 +1,571 @@
+---
+title: "maryland_new"
+date: "2025-04-30"
+output:
+  html_document:
+    theme: simplex
+    toc: yes
+    toc_float: yes
+    progress: hide
+    code_folding: hide
+    code_download: yes
+  params:
+  include_warnings: false  # Add this line to suppress warnings
+  
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('/Users/jiatong/Desktop/MUSA-Praticum-Jiatong/State_agg_Rmd')
+rm(list = ls())
+library(httr)
+library(jsonlite)
+library(sf)
+library(knitr)
+library(ggplot2)
+
+library(tidycensus)
+library(dplyr)
+library(sf)
+library(tidyverse)
+library(readxl)
+```
+
+# Introduction
+
+Utility disconnection refers to the cuts off service due to non-payment. Million of households across the United States face utility disconnections because they are unable to afford their bills, highlighting a significant and widespred issue of energy insecurity.
+
+The following analysis aggregate utility disconnection rate data from zip codes to counties in order to reveal broader geographic patterns and disparities.
+
+
+# File import - data pre-processing
+
+To aggregating the zip code to counties level, I will use the [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) zip code crosswalk data.
+This dataset provides robust way to reapportion data from zip code to geographic units, such as county level, tract level.
+
+In some case, some zip codes crosswalk mutiple county.
+This data provide the address ratio for each zip code.
+in the following examination, i will following [Wilson and Din (2018)](https://www.huduser.gov/portal/periodicals/cityscpe/vol20num2/ch16.pdf) suggestion, remove the duplicating zip code that determines the county base on the largest ratio.
+
+## Utility data
+
+> Importing utility data of Maryland state in the following code chunk
+
+```{r}
+maryland <- read_csv("State-Specific Data/MarylandZipcode.csv")
+colnames(maryland)
+
+```
+
+## HUD zip code crosswalk data
+
+The following code chunk that imports [HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) zip code crosswalk data.
+
+[HUD](https://www.huduser.gov/portal/dataset/uspszip-api.html) utilize use of the geographical information of USPS delivery points to allocate them to geographic units (such as Census Tracts or Counties).
+HUD establishes proportionally weighted variables, such as res_ratio, bus_ratio, etc, indicating which geographical unit each address in a certain ZIP Code is distributed.
+
+
+```{r}
+key <- "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI2IiwianRpIjoiODk1ZWRlZDM4MjgwOTIyZDFlY2Q2MmYxMjMwODcwMDYwNGYxNTZiYzE5NWEzYmJlMmYwMGRhMmY5MDQ0MzI3N2YzM2E3NGE0M2Q2ZjY2ZmIiLCJpYXQiOjE3NDM3MDY1NDkuNzYyMzcxLCJuYmYiOjE3NDM3MDY1NDkuNzYyMzc0LCJleHAiOjIwNTkyMzkzNDkuNzQ0NzQ1LCJzdWIiOiI5NDUxMSIsInNjb3BlcyI6W119.aw4CshBNx4n3m-y1jjt1OrNh28BaRr3mNBH51OptRk_FCNZk8Su68E06d6tZ7UViafXsSeI1-OzazhGqnMzSJA"
+url <- "https://www.huduser.gov/hudapi/public/usps"
+
+# Send the GET request
+response_MD <- httr::GET(url, query = list(type = 2, query = "MD"), 
+                         add_headers(Authorization = paste("Bearer", key)))
+
+# Check for errors
+if (httr::http_error(response_MD)) {
+  stop("Error: ", httr::http_status(response_MD)$message)
+}
+
+# Access the output as text
+outputMD <- httr::content(response_MD, as = "text", encoding = "UTF-8")
+
+# Parse JSON content from the text
+output_json_MD <- fromJSON(outputMD)
+
+# Convert to data frame (check if it's nested first)
+MD_crosswalk <- as.data.frame(output_json_MD)
+
+# View the first few rows
+kable(head(MD_crosswalk))
+```
+
+
+
+## Census for County_FIPS
+
+> [County adjacency file](https://www.census.gov/geographies/reference-files/time-series/geo/county-adjacency.html) provide the reference of GEOID in Census data, which also provide the actual county name.
+>
+
+> Since HUD file does not have County name, but it contains `data.results.geoid`, which is county of GEOID.
+>
+> Census provide the reference of GEOID in Census data, which also provide the actual county name.
+
+```{r census, results='hide'}
+
+# Set your Census API key (only once per session)
+# census_api_key("YOUR_API_KEY", install = TRUE)
+
+# Get MD county geometries
+MD_counties <- get_acs(
+  geography = "county",
+  state = "MD",
+  variables = "B01003_001",  # total population (placeholder variable)
+  geometry = TRUE,
+  year = 2021
+) %>%
+  select(GEOID, NAME, geometry)
+
+
+
+```
+```{r}
+kable(head(MD_counties))
+```
+
+
+## Merging census and HUD crosswalk data to get the county name
+
+``GEOID``in MD_counties  = ``data.results.geoid`` in MD_crosswalk
+Therefore, here merges the GEOID to access the county name
+
+```{r}
+# Convert both columns to character if they are not already
+MD_crosswalk$data.results.geoid <- as.character(MD_crosswalk$data.results.geoid)
+MD_counties$GEOID <- as.character(MD_counties$GEOID)
+
+# Check column names
+#colnames(OR_counties)
+# colnames(OR_data)
+
+# Merge by GEOID and County_FIPS
+merged_data_MD <- merge(MD_counties, MD_crosswalk, by.x = "GEOID", by.y = "data.results.geoid", all.x = TRUE) %>% st_drop_geometry()
+
+# Display the merged data
+kable(head(merged_data_MD))
+```
+
+## removing the duplicating zip code
+following Wilson and Din (2018) suggestion, remove the duplicating zip code that determines the county base on the largest ratio.
+
+```{r}
+filtered_data_MD <- merged_data_MD %>%
+  group_by(data.results.zip) %>%
+  filter(data.results.tot_ratio == max(data.results.tot_ratio)) %>%
+  ungroup() %>% 
+  select(-data.year, -data.quarter, -data.results.state, -data.crosswalk_type)
+
+# View the filtered data
+kable(head(filtered_data_MD))
+```
+
+# Merging utility data with zip code data
+
+> Since the dataset includes some ambiguous or invalid ZIP codes, but we still want to retain those records, I manually filled in the `NAME` column based on known ZIP-to-county matches.
+> Some of these ZIP codes do **not** belong to Maryland State, so I explicitly marked invalid entries and accurately assigned counties for out-of-state ZIPs where applicable.
+
+  - Mutates merged_utility_MD by updating two columns: NAME and data.results.tot_ratio.
+  - Fills NAME based on specific zip_code matches (assigning county names or "Invalid" if unmatched).
+  - Sets data.results.tot_ratio to 1 for those specific zip_code values listed.
+  - Leaves original NAME and data.results.tot_ratio unchanged if the zip_code does not match.
+  
+```{r merged_utility_MD}
+# Convert both columns to character if they are not already
+filtered_data_MD$data.results.zip <- as.character(filtered_data_MD$data.results.zip)
+maryland$zip_code <- as.character(maryland$zip_code)
+
+merged_utility_MD<- merge(maryland, filtered_data_MD, by.x = "zip_code", by.y = "data.results.zip", all.x = TRUE)
+
+head(merged_utility_MD %>% filter(is.na(NAME)) %>% distinct(zip_code))
+```
+
+
+### filltering county name for those zip code without county name
+
+Since HUD does not provide all the county name, I need to fill the county name by search from the internet.
+I have create a new column for filling all zip code county name. 
+- 1. I need to make sure a format are same, which need to adjust the format
+- 2.  those zip code that are not in the HUD dataset, resulting NA value in``data.results.tot_ratio`` . To adjust it, I fill the 1 in `data.results.tot_ratio``that represents all zip code are fully in the cerntain county.
+
+--- 
+-   If ZIP code is valid ➔ 
+    (example: `"Baker County, Maryland"`)
+
+-   If ZIP code is invalid ➔ `"Invalid"`
+
+    I checked using the [ZIP code lookup](https://www.unitedstateszipcodes.org) resources.
+
+```{r}
+merged_utility_MD <- merged_utility_MD %>%
+  mutate(
+    NAME = case_when(
+      zip_code == 17214 ~ "Franklin County, Pennsylvania",
+      zip_code == 20635 ~ "St. Mary's County, Maryland",
+      zip_code == 20643 ~ "Charles County, Maryland",
+      zip_code == 20813 ~ "Montgomery County, Maryland",
+      zip_code == 21088 ~ "Baltimore County, Maryland",
+      zip_code == 21129 ~ "Baltimore County, Maryland",
+      zip_code == 21546 ~ "Allegany County, Maryland",
+      zip_code == 21747 ~ "Washington County, Maryland",
+      zip_code == 25434 ~ "Hampshire County, West Virginia",
+      zip_code == 26726 ~ "Hampshire County, West Virginia",
+      zip_code == 29877 ~ "McCormick County, South Carolina",
+      TRUE ~ NAME
+    ),
+    data.results.tot_ratio = case_when(
+      zip_code %in% c(17214, 20635, 20643, 20813, 21088, 21129, 21546, 21747, 25434, 26726, 29877) ~ 1,
+      TRUE ~ data.results.tot_ratio
+    )
+  )
+
+```
+
+
+```{r, include=FALSE}
+library(dplyr)
+library(stringr)
+
+# addressing county name format
+merged_utility_MD <- merged_utility_MD %>%
+  mutate(
+    county_name = case_when(
+      !is.na(county) & !str_detect(county, "/") & county != "" ~ county,
+      TRUE ~ str_extract(NAME, "^(.*?) County")  
+    )
+  ) %>% 
+    mutate(
+    county_name = str_replace(county_name, regex("(?i)\\s*County"), "") %>%
+                  str_trim()) %>% 
+  mutate(
+
+        county_name = str_replace(county_name, regex("(?i)\\s*County"), "") %>%
+                  str_trim(),
+    
+    county_name = case_when(
+      county_name == "Prince Georges" ~ "Prince George's",
+      TRUE ~ county_name
+    ),
+   county_name = if_else(is.na(county_name) | county_name == "", "Baltimore City", county_name),
+   data.results.tot_ratio = if_else(is.na(data.results.tot_ratio), 1, data.results.tot_ratio)
+  )
+
+merged_utility_MD %>% distinct(county_name)
+
+```
+
+
+```{r}
+merged_utility_MD_1 <- merged_utility_MD %>%   
+  mutate(      
+    est_disconnections = number_of_disonnections * data.results.tot_ratio,
+    difference = number_of_disonnections - est_disconnections,
+    PCT_DIF = ifelse(number_of_disonnections == 0, NA,
+                     100 * (est_disconnections - number_of_disonnections) / number_of_disonnections),
+    mae = abs(difference),  
+    mape = case_when(
+      number_of_disonnections == 0 & est_disconnections == 0 ~ 0,  
+      number_of_disonnections == 0 ~ NA_real_,                   
+      TRUE ~ abs(difference) / number_of_disonnections * 100     
+    ))
+```
+
+# Aggregate data from zip code to county level
+The code aggregates utility disconnection data at the **county level** in Maryland State by grouping the dataset `merged_utility_MD` based on `NAME` (county), `year`, `month`, and `utility_name`.
+The resulting summary table `MD_county_agg` includes:
+
+-   **`total_disconnections`**: The total number of reported utility disconnections in each group.
+
+-   **`est_disconnections`**: The estimated number of disconnections, adjusted using a weighting factor (`data.results.tot_ratio`), which accounts for partial ZIP-to-county mappings.
+
+-   **`avg_disconnection_rate`**: The average disconnection count per record in each zip code
+
+-   **`difference`**: The numerical difference between the **`total_disconnections`** and **`est_disconnections`** totals, which can help assess the impact of the weighting method.
+
+- **`PCT_DIF`**: the precentage of **`difference`**
+- **`mae`** (Mean Absolute Error): mean of absolute differences between total_disconnections and est_disconnections
+
+- **`mape`**(Mean Absolute Percentage Error):
+the percentage equivalent of mean absolute error (MAE), measuring the accuracy between total_disconnections and est_disconnections
+
+```{r}
+MD_county_agg <- merged_utility_MD %>%
+  group_by(NAME, year, month, utility_name) %>%
+  summarise(
+    total_disconnections = sum(number_of_disonnections, na.rm = TRUE),
+    est_disconnections = sum(number_of_disonnections * data.results.tot_ratio, na.rm = TRUE),
+    avg_disconnection_rate = mean(number_of_disonnections, na.rm = TRUE),
+    difference = sum(total_disconnections - est_disconnections, na.rm = TRUE),  
+    PCT_DIF = case_when(
+      sum(number_of_disonnections, na.rm = TRUE) == 0 & sum(est_disconnections, na.rm = TRUE) == 0 ~ 0,
+      sum(number_of_disonnections, na.rm = TRUE) == 0 ~ NA_real_,
+      TRUE ~ 100 * (sum(est_disconnections, na.rm = TRUE) - sum(number_of_disonnections, na.rm = TRUE)) / sum(number_of_disonnections, na.rm = TRUE)
+    ),
+    mae = abs(sum(difference, na.rm = TRUE)),
+    mape = case_when(
+      sum(number_of_disonnections, na.rm = TRUE) == 0 & sum(est_disconnections, na.rm = TRUE) == 0 ~ 0,
+      sum(number_of_disonnections, na.rm = TRUE) == 0 ~ NA_real_,
+      TRUE ~ abs(sum(difference, na.rm = TRUE)) / sum(number_of_disonnections, na.rm = TRUE) * 100
+    ),
+    .groups = "drop"   
+  )
+
+kable(head(MD_county_agg))
+```
+
+
+
+```{r}
+# Step 1: group by NAME + year，summary total_disconnections
+MD_county_agg_summary <- MD_county_agg %>%
+  group_by(NAME, year) %>%
+  summarise(
+    total_disconnections = sum(total_disconnections, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Step 2: creating grid
+county_year_grid <- expand_grid(
+  NAME = unique(MD_counties$NAME),
+  year = unique(MD_county_agg_summary$year)
+)
+
+# Step 3: Left join
+MD_county_agg_geo <- county_year_grid %>%
+  left_join(MD_counties, by = "NAME") %>%
+  left_join(MD_county_agg_summary, by = c("NAME", "year")) %>%
+  st_as_sf()
+
+# Step 4: 
+ggplot(MD_county_agg_geo) +
+  geom_sf(aes(fill = total_disconnections), color = "white") +
+  facet_wrap(~ year) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt", na.value = "grey80") +
+  labs(
+    title = "Cumulative Total Disconnections in Disconnection Estimates",
+    fill = "Total Disconnections",
+    caption = "Source: Aggregated ZIP-to-County Estimates\nUnit: Disconnection Count Difference"
+  ) +
+  theme_minimal() +
+    theme(
+    axis.text = element_blank(),   
+    axis.ticks = element_blank(),  
+    panel.grid = element_blank()  
+  )
+
+```
+
+```{r}
+MD_county_agg_geo_full <- MD_county_agg %>%
+  left_join(MD_counties, by = "NAME") %>%
+  st_as_sf()
+
+#st_write(MD_county_agg_geo_full, "MD_county_agg_summary.geojson", driver = "GeoJSON")
+
+write_csv(MD_county_agg, "MD_county_agg_summary.csv")
+
+```
+
+
+# Vadilating 
+
+## comparing **total_disconnections and est_disconnections**
+
+> this section mainly focus Din, A., & Wilson, R.
+(2020) suggestion that comparing actual count (total_disconnections) and estimate.
+>
+
+To validate the ZIP-to-county aggregation using HUD-provided weighting ratios (`data.results.tot_ratio`), I compared the **raw total disconnection** with the **estimated total disconnections** after applying the weights.
+
+In previous aggregating step, `WA_county_agg` aggregating the disconnection data by county, utility company, year, and month.
+ -   `total_disconnections`: the unweighted sum of disconnections reported within each group.
+
+ -   `est_disconnections`: the weighted sum, using the ratio to estimate each ZIP's contribution to the county.
+
+> Measuring the impact of weighting
+>
+> To evaluate how much the weighting affected the total count:
+>
+ -   I summed the **unweighted totals** (`total_disconnections`) across all counties, resulting in **65572 disconnections**.
+
+ -   I summed the **weighted totals**(`est_disconnections`), yielding **64477.7040892621 disconnections**.
+
+ -   The **absolute difference** between the two totals was **1094.29591073794 disconnections**, indicating the net shift caused by applying HUD’s weighting.
+
+```{r}
+print(paste("rows - unweighted total(sum of number_of_disconnections):", sum(MD_county_agg$total_disconnections)))
+print(paste("rows - weighted total(est_disconnection) :", sum(MD_county_agg$est_disconnections)))
+print(paste("Difference (impact of weighting):", sum(MD_county_agg$total_disconnections - MD_county_agg$est_disconnections)))
+```
+
+> **Relative difference**
+>
+> To contextualize this shift, I calculated the **relative difference** as a percentage of the unweighted total:
+
+```{r}
+relative_diff_MD <- 
+  sum(MD_county_agg$difference, na.rm = TRUE) / sum(MD_county_agg$total_disconnections, na.rm = TRUE) * 100
+
+print(paste("Relative Difference (%):", round(relative_diff_MD, 2), "%"))
+```
+
+The **1.67% relative difference** indicates that applying the ZIP-to-county weighting introduces **minimal deviation** from the raw totals.
+This result supports the feasibility of using HUD's crosswalk-based ratios to estimate disconnections at the county level, even in the absence of point-level utility data.
+
+## Evaluation Metrics
+
+In this section, I'm gonna to **Calculate Evaluation Metrics**, which quantify the estimation error across all grouped observations (by county, month, and utility):
+
+MAE (Mean Absolute Error): mean of absolute differences between total_disconnections and est_disconnections
+- MAE is not a normalized metric and is dependent on the scale of the data. This means that an MAE value of 10 might be considered good for predicting millions, but poor for predicting values in the range of 2 digits. 
+
+
+$$
+\text{Mean Absolute Error} = \frac{1}{n} \sum_{i=1}^{n} \left| \text{total_disconnections}_i - \text{est_disconnections}_i \right|
+$$
+
+-   MAE value range is 0 from infinity, therefore, less than 1 indicting good accuracy.
+
+MAPE (Mean Absolute Percentage Error):
+
+the percentage equivalent of mean absolute error (MAE), measuring the accuracy between total_disconnections and est_disconnections
+
+$$
+\text{Mean Percentage Error} = \frac{1}{n} \sum_{i=1}^{n} \left( \frac{\text{total_disconnections} - \text{est_disconnections}_i}{\text{total_disconnections}_i} \right) \times 100
+$$
+
+
+
+-   <https://www.vexpower.com/brief/mean-absolute-percentage-error>
+
+-   <https://www.researchgate.net/publication/257812432_Using_the_R-MAPE_index_as_a_resistant_measure_of_forecast_accuracy>
+
+
+
+```{r}
+# Create error columns
+MD_county_agg <- MD_county_agg %>%
+  mutate(
+    abs_error = abs(total_disconnections - est_disconnections),
+    pct_error = abs_error / ifelse(total_disconnections == 0, NA, total_disconnections)
+  )
+
+# Calculate metrics
+mae <- mean(MD_county_agg$abs_error, na.rm = TRUE)
+mape <- mean(MD_county_agg$pct_error, na.rm = TRUE) * 100  # percentage
+rmse <- sqrt(mean((MD_county_agg$total_disconnections - MD_county_agg$est_disconnections)^2, na.rm = TRUE))
+
+print(paste("MAE in county level:", round(mae, 2)))
+print(paste("MAPE (%) in county level:", round(mape, 2)))
+```
+
+
+The following plot visualize the MAPE of aggregating to county from 2019 to 2024, showing the difference percentage between the total_disconnections and est_disconnections.
+
+> [Montaño, Juan, and Palmer et al](https://www.researchgate.net/publication/257812432_Using_the_R-MAPE_index_as_a_resistant_measure_of_forecast_accuracy). suggest that a MAPE below 20% indicates good accuracy.
+
+> In general, the MAPE across Maryland State remains under this 20% threshold, and 1.42% MAPE value represents high accuracy across Maryland in county level.
+
+
+```{r}
+print(paste("MAE in zip code level:", round(mean(merged_utility_MD_1$mae, na.rm = TRUE), 2)))
+print(paste("MAPE (%) in zip code level:", round(mean(merged_utility_MD_1$mape, na.rm = TRUE), 2)))
+```
+
+> In general, the MAPE across Maryland State remains under this 20% threshold, only 1.41% MAPE value represents high accuracy across Maryland in zip code 
+
+> The following plot visualizes the MAPE of disconnection estimates from 2019 to 2024. Overall, the plot shows that MAPE values are generally below 20% for each county, indicating good accuracy.
+
+```{r}
+# Step 1: make sure each year have County
+county_year_grid <- expand_grid(
+  NAME = unique(MD_counties$NAME),
+  year = unique(MD_county_agg$year)
+)
+
+# Step 2: summary error summary
+county_error_summary <- MD_county_agg %>%
+  group_by(NAME, year) %>%
+  summarise(
+    total_abs_error = sum(mae, na.rm = TRUE),
+    total_disconnections = sum(total_disconnections, na.rm = TRUE),
+    total_est_disconnections = sum(est_disconnections, na.rm = TRUE),
+    mape = (total_abs_error / total_disconnections) * 100,  # Percent form
+    .groups = "drop"
+  )
+
+# Step 3: using grid left_join，let no data be NA value
+county_error_complete <- county_year_grid %>%
+  left_join(county_error_summary, by = c("NAME", "year"))
+
+# Step 4:  join spatial
+county_error_map <- MD_counties %>%
+  left_join(county_error_complete, by = "NAME")  
+
+# Step 5: 
+ggplot(county_error_map) +
+  geom_sf(aes(fill = mape), color = "white") +
+  facet_wrap(~ year) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt", na.value = "grey80") +
+  labs(
+    title = "Cumulative MAPE in Disconnection Estimates (2020–2024)",
+    fill = "MAPE",
+    caption = "Source: Aggregated ZIP-to-County Estimates\nUnit: Disconnection Count Difference"
+  ) +
+  theme_minimal() +
+      theme(
+    axis.text = element_blank(),   
+    axis.ticks = element_blank(),  
+    panel.grid = element_blank()  
+  )
+
+```
+
+# limitation
+
+-  In this study, when aggregating utility data from ZIP code to county levels, it is not feasible to directly validate the accuracy of the estimates.
+
+-   As noted by Din and Wilson (2020), when aggregating data, it is unlikely to have point-level information available; otherwise, there would be no need to perform crosswalk processing.
+
+-   Although direct validation is not possible, examining differences between estimated and actual counts may reveal additional patterns of utility disconnection rate, which can be further explored through more detailed spatial analysis.
+
+<!-- -->
+
+--- MAPE: the percentage equivalent of mean absolute error (MAE), measuring the accuracy between ``total_disconnections`` and ``est_disconnections``
+
+--- mean of absolute differences between ``total_disconnections`` and ``est_disconnections``
+
+MAPE measures percentage error; MAE measures the average absolute difference between actual and estimated disconnections.
+#### MAPE > 20% and MAE > 1 within the data
+
+-- Some small disconnection counts can lead to a large percentage difference (high MAPE). Therefore, we also examine the MAE:
+a MAE less than 1 indicates a high level of accuracy despite a seemingly large MAPE.
+
+-- As we lack point-level data, a precise one-to-one match between ``total_disconnections`` and ``est_disconnections`` values at the ZIP code level is not feasible.
+
+Among 3354 ZIP code-level records, only 41 records (1.22%) showed a MAPE greater than 20% and a MAE greater than 1.
+```{r}
+kable(head(
+  merged_utility_MD_1 %>% 
+    filter(mape >20 & mae > 1) %>% 
+    select( -data.results.res_ratio, -data.results.bus_ratio, -data.results.oth_ratio, -GEOID, -state)
+  ))
+
+```
+
+Among 340 ZIP county-level records, only 4 records (1.17%) showed a MAPE greater than 20% and a MAE greater than 1.
+
+
+```{r}
+kable(
+  MD_county_agg %>% 
+    filter(mape >20 & mae > 1) )
+
+```
+
+
+> **Given the absence of point-level disconnection data, this very low error rate demonstrates strong model accuracy at the ZIP code aggregation level.**
+
