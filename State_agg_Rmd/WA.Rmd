@@ -125,13 +125,10 @@ kable(head(WA_counties))
 ```{r}
 
 # Convert both columns to character if they are not already
-#OR_counties$County_FIPS <- as.character(OR_counties$County_FIPS)
 WA_crosswalk$data.results.geoid <- as.character(WA_crosswalk$data.results.geoid)
 WA_counties$GEOID <- as.character(WA_counties$GEOID)
 
-# Check column names
-#colnames(OR_counties)
-# colnames(OR_data)
+# C
 
 # Merge by GEOID and County_FIPS
 merged_data_WA <- merge(WA_counties, WA_crosswalk, by.x = "GEOID", by.y = "data.results.geoid", all.x = TRUE)

@@ -126,9 +126,6 @@ Therefore, here merges the GEOID to access the county name
 CA_crosswalk$data.results.geoid <- as.character(CA_crosswalk$data.results.geoid)
 CA_counties$GEOID <- as.character(CA_counties$GEOID)
 
-# Check column names
-#colnames(OR_counties)
-# colnames(OR_data)
 
 # Merge by GEOID and County_FIPS
 merged_data_CA <- merge(CA_counties, CA_crosswalk, by.x = "GEOID", by.y = "data.results.geoid", all.x = TRUE) %>% st_drop_geometry()
@@ -401,8 +398,8 @@ merged_utility_SCE_1 <- merged_utility_SCE %>%
 
 # Aggregate data from zip code to county level
 
-The code aggregates utility disconnection data at the **county level** in Maryland State by grouping the dataset `merged_utility_MD` based on `NAME` (county), `year`, `month`, and `utility_name`.
-The resulting summary table `WA_county_agg` includes:
+The code aggregates utility disconnection data at the **county level** in Maryland State by grouping the dataset `merged_utility_CA` based on `NAME` (county), `year`, `month`, and `utility_name`.
+The resulting summary table `CA_county_agg` includes:
 
 -   **`total_disconnections`**: The total number of reported utility disconnections in each group.
 

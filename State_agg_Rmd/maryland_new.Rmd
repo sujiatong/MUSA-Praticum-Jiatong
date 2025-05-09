@@ -275,7 +275,7 @@ merged_utility_MD_1 <- merged_utility_MD %>%
 
 # Aggregate data from zip code to county level
 The code aggregates utility disconnection data at the **county level** in Maryland State by grouping the dataset `merged_utility_MD` based on `NAME` (county), `year`, `month`, and `utility_name`.
-The resulting summary table `WA_county_agg` includes:
+The resulting summary table `MD_county_agg` includes:
 
 -   **`total_disconnections`**: The total number of reported utility disconnections in each group.
 
@@ -363,7 +363,7 @@ MD_county_agg_geo_full <- MD_county_agg %>%
   left_join(MD_counties, by = "NAME") %>%
   st_as_sf()
 
-#st_write(MD_county_agg_geo_full, "/Users/jiatong/Desktop/MUSA-practicum/WA/data/MD_county_agg_summary.geojson", driver = "GeoJSON")
+#st_write(MD_county_agg_geo_full, "MD_county_agg_summary.geojson", driver = "GeoJSON")
 
 write_csv(MD_county_agg, "MD_county_agg_summary.csv")
 
