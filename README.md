@@ -38,7 +38,7 @@
   - Merging utility data with zip code data
   - Aggregate data from zip code to county level
   
-### Aggregating (ZIP-to-county aggregation)
+#### Aggregating (ZIP-to-county aggregation)
 
 ZIP-to-county aggregation summarizes utility disconnection data at the **county level** in Washington State by grouping the dataset `merged_utility` based on `NAME` (county), `year`, `month`, and `utility_name`.
 The resulting summary table `county_agg` includes:
